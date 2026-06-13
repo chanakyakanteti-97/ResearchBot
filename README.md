@@ -34,7 +34,7 @@ Writes structured research report
 
 | Component | Tool |
 |---|---|
-| LLM + Function Calling | Google Gemini 1.5 Flash |
+| LLM + Function Calling | Google Gemini 2.5 Flash |
 | Web Search | DuckDuckGo (no API key needed) |
 | Web Scraping | requests + BeautifulSoup4 |
 | Backend | FastAPI |
