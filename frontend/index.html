@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ResearchBot — AI Research Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #040d07;
+      --surface: #060f09;
+      --border: #0d2410;
+      --green: #00e676;
+      --green-dim: #00a152;
+      --green-glow: rgba(0, 230, 118, 0.08);
+      --green-faint: rgba(0, 230, 118, 0.04);
+      --yellow: #ffd740;
+      --blue: #64b5f6;
+      --red: #ff5252;
+      --text: #c8e6c9;
+      --muted: #4a7c59;
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'Space Grotesk', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      min-height: 100vh;
+      padding: 2rem 1rem 4rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Scan line effect */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.03) 2px,
+        rgba(0,0,0,0.03) 4px
+      );
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* Noise background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: radial-gradient(ellipse at 20% 50%, rgba(0,230,118,0.03) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .wrap {
+      width: 100%;
+      max-width: 780px;
+    }
+
+    /* Header */
+    header {
+      margin-bottom: 2.5rem;
+      animation: flicker 0.15s ease both;
+    }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .status-dot {
+      width: 10px; height: 10px;
+      background: var(--green);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    h1 {
+      font-family: var(--mono);
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--green);
+      text-shadow: 0 0 20px rgba(0,230,118,0.4);
+      letter-spacing: 0.05em;
+    }
+
+    .version {
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-left: auto;
+    }
+
+    .header-sub {
+      font-size: 0.75rem;
+      color: var(--muted);
+      padding-left: 1.4rem;
+    }
+
+    /* Input panel */
+    .input-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1.2rem 1.4rem;
+      margin-bottom: 1.2rem;
+      animation: fadeIn 0.4s ease both 0.1s;
+      opacity: 0;
+      animation-fill-mode: forwards;
+    }
+
+    .prompt-line {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .prompt-symbol {
+      color: var(--green);
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      caret-color: var(--green);
+    }
+
+    input[type="text"]::placeholder { color: var(--muted); }
+
+    .run-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1.2rem;
+      background: transparent;
+      border: 1px solid var(--green-dim);
+      border-radius: 3px;
+      color: var(--green);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      letter-spacing: 0.05em;
+    }
+
+    .run-btn:hover { background: var(--green-glow); border-color: var(--green); box-shadow: 0 0 10px var(--green-glow); }
+    .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .hint {
+      margin-top: 0.6rem;
+      font-size: 0.7rem;
+      color: var(--muted);
+      padding-left: 1.4rem;
+    }
+
+    /* Terminal output */
+    .terminal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      display: none;
+      animation: fadeIn 0.3s ease both;
+    }
+
+    .terminal-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1rem;
+      background: #060f09;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+
+    .terminal-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot-red { background: #ff5252; }
+    .dot-yellow { background: #ffd740; }
+    .dot-green { background: var(--green); }
+
+    .terminal-title { margin-left: 0.3rem; }
+
+    .terminal-body {
+      padding: 1rem 1.2rem;
+      min-height: 120px;
+      max-height: 320px;
+      overflow-y: auto;
+      font-size: 0.8rem;
+      line-height: 1.7;
+    }
+
+    .terminal-body::-webkit-scrollbar { width: 4px; }
+    .terminal-body::-webkit-scrollbar-track { background: transparent; }
+    .terminal-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .log-line {
+      display: flex;
+      gap: 0.6rem;
+      margin-bottom: 0.2rem;
+      animation: slideIn 0.2s ease both;
+    }
+
+    .log-time { color: var(--muted); flex-shrink: 0; }
+    .log-tag { flex-shrink: 0; font-weight: 700; }
+    .log-tag.search { color: var(--blue); }
+    .log-tag.read { color: var(--yellow); }
+    .log-tag.result { color: var(--muted); }
+    .log-tag.done { color: var(--green); }
+    .log-tag.system { color: var(--green-dim); }
+    .log-msg { color: var(--text); word-break: break-all; }
+
+    .cursor-blink {
+      display: inline-block;
+      width: 8px; height: 14px;
+      background: var(--green);
+      animation: blink 1s step-end infinite;
+      vertical-align: text-bottom;
+    }
+
+    /* Report */
+    .report-panel {
+      margin-top: 1.2rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      display: none;
+      animation: fadeIn 0.4s ease both;
+    }
+
+    .report-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.7rem 1.2rem;
+      background: #060f09;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .report-title {
+      font-size: 0.75rem;
+      color: var(--green);
+      letter-spacing: 0.1em;
+      font-weight: 700;
+    }
+
+    .copy-btn {
+      padding: 0.3rem 0.8rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover { border-color: var(--green-dim); color: var(--green); }
+
+    .report-body {
+      padding: 1.4rem 1.6rem;
+      font-family: var(--sans);
+      font-size: 0.9rem;
+      line-height: 1.8;
+      color: #d4e6d4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Stats bar */
+    .stats-bar {
+      display: flex;
+      gap: 1.5rem;
+      padding: 0.6rem 1.2rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+
+    .stat { display: flex; gap: 0.3rem; }
+    .stat-val { color: var(--green); }
+
+    /* Animations */
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+    @keyframes flicker { 0% { opacity: 0; } 10% { opacity: 1; } 12% { opacity: 0.8; } 14% { opacity: 1; } }
+
+    .examples {
+      margin-top: 0.6rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      padding-left: 1.4rem;
+    }
+
+    .example-chip {
+      padding: 0.2rem 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      font-size: 0.7rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .example-chip:hover { border-color: var(--green-dim); color: var(--green); background: var(--green-faint); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="header-top">
+      <div class="status-dot"></div>
+      <h1>RESEARCHBOT_v1.0</h1>
+      <span class="version"> autonomous research agent</span>
+    </div>
+    <p class="header-sub">powered by Gemini 2.5 Flash · DuckDuckGo Search · BeautifulSoup</p>
+  </header>
+
+  <!-- Input -->
+  <div class="input-panel">
+    <div class="prompt-line">
+      <span class="prompt-symbol">$&gt;</span>
+      <input type="text" id="topicInput"
+        placeholder="Enter a research topic..."
+        onkeydown="if(event.key==='Enter') startResearch()"/>
+      <button class="run-btn" id="runBtn" onclick="startResearch()">
+        ▶ RUN AGENT
+      </button>
+    </div>
+    <p class="hint">Examples (click to use):</p>
+    <div class="examples">
+      <span class="example-chip" onclick="setTopic(this)">AI in cancer detection 2025</span>
+      <span class="example-chip" onclick="setTopic(this)">Quantum computing breakthroughs</span>
+      <span class="example-chip" onclick="setTopic(this)">Large language model architectures</span>
+      <span class="example-chip" onclick="setTopic(this)">Transformer vs Mamba models</span>
+      <span class="example-chip" onclick="setTopic(this)">Reinforcement learning from human feedback</span>
+    </div>
+  </div>
+
+  <!-- Terminal log -->
+  <div class="terminal" id="terminal">
+    <div class="terminal-header">
+      <div class="terminal-dot dot-red"></div>
+      <div class="terminal-dot dot-yellow"></div>
+      <div class="terminal-dot dot-green"></div>
+      <span class="terminal-title">agent_execution_log</span>
+    </div>
+    <div class="terminal-body" id="terminalBody"></div>
+  </div>
+
+  <!-- Report -->
+  <div class="report-panel" id="reportPanel">
+    <div class="report-header">
+      <span class="report-title">// RESEARCH_REPORT.md</span>
+      <button class="copy-btn" onclick="copyReport()">⎘ COPY</button>
+    </div>
+    <div class="report-body" id="reportBody"></div>
+    <div class="stats-bar" id="statsBar"></div>
+  </div>
+
+</div>
+
+<script>
+  let reportText = '';
+  let startTime = null;
+
+  function setTopic(el) {
+    document.getElementById('topicInput').value = el.textContent;
+  }
+
+  function getTime() {
+    const d = new Date();
+    return d.toTimeString().slice(0,8);
+  }
+
+  function addLog(tag, tagClass, message) {
+    const body = document.getElementById('terminalBody');
+    // Remove cursor if present
+    const cursor = body.querySelector('.cursor-blink');
+    if (cursor) cursor.remove();
+
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    line.innerHTML = `
+      <span class="log-time">[${getTime()}]</span>
+      <span class="log-tag ${tagClass}">${tag}</span>
+      <span class="log-msg">${message}</span>
+    `;
+    body.appendChild(line);
+
+    // Add blinking cursor at end
+    const cursorEl = document.createElement('span');
+    cursorEl.className = 'cursor-blink';
+    body.appendChild(cursorEl);
+
+    body.scrollTop = body.scrollHeight;
+  }
+
+  function renderSteps(steps) {
+    steps.forEach(step => {
+      if (step.type === 'tool_call') {
+        if (step.tool_name === 'web_search') {
+          const q = step.tool_args?.query || '';
+          addLog('[SEARCH]', 'search', `Searching: "${q}"`);
+        } else if (step.tool_name === 'read_webpage') {
+          const u = step.tool_args?.url || '';
+          addLog('[READ]  ', 'read', `Reading: ${u.slice(0, 70)}${u.length > 70 ? '...' : ''}`);
+        }
+      } else if (step.type === 'tool_result') {
+        addLog('[DATA]  ', 'result', `Retrieved ${step.content.length} chars of content`);
+      } else if (step.type === 'final') {
+        addLog('[DONE]  ', 'done', 'Writing final research report...');
+      }
+    });
+  }
+
+  async function startResearch() {
+    const topic = document.getElementById('topicInput').value.trim();
+    if (!topic) return;
+
+    const btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ RUNNING...';
+    startTime = Date.now();
+
+    // Show terminal
+    const terminal = document.getElementById('terminal');
+    terminal.style.display = 'block';
+    document.getElementById('terminalBody').innerHTML = '';
+    document.getElementById('reportPanel').style.display = 'none';
+
+    addLog('[INIT]  ', 'system', `Agent started. Topic: "${topic}"`);
+    addLog('[PLAN]  ', 'system', 'Determining research strategy...');
+
+    try {
+      const res = await fetch('/api/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.detail || 'Agent failed');
+
+      // Render the steps
+      renderSteps(data.steps);
+
+      // Remove cursor
+      const cursor = document.getElementById('terminalBody').querySelector('.cursor-blink');
+      if (cursor) cursor.remove();
+
+      addLog('[✓]     ', 'done', `Research complete. ${data.total_steps} actions taken.`);
+
+      // Show report
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      reportText = data.report;
+      document.getElementById('reportBody').textContent = data.report;
+      document.getElementById('statsBar').innerHTML = `
+        <div class="stat"><span>topic:</span><span class="stat-val">${data.topic.slice(0,40)}</span></div>
+        <div class="stat"><span>steps:</span><span class="stat-val">${data.total_steps}</span></div>
+        <div class="stat"><span>time:</span><span class="stat-val">${elapsed}s</span></div>
+        <div class="stat"><span>chars:</span><span class="stat-val">${data.report.length}</span></div>
+      `;
+      document.getElementById('reportPanel').style.display = 'block';
+      document.getElementById('reportPanel').scrollIntoView({ behavior: 'smooth' });
+
+    } catch (err) {
+      addLog('[ERR]   ', 'system', `Error: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '▶ RUN AGENT';
+    }
+  }
+
+  function copyReport() {
+    navigator.clipboard.writeText(reportText).then(() => {
+      const btn = document.querySelector('.copy-btn');
+      btn.textContent = '✓ COPIED';
+      setTimeout(() => btn.textContent = '⎘ COPY', 2000);
+    });
+  }
+</script>
+</body>
+</html>
